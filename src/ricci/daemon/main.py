@@ -33,7 +33,7 @@ class Core:
     """Сборка ядра: сердце → органы → кора → три времени → коллапс."""
 
     def __init__(self, kb_db: str = KB_DB, n_nodes: int = 256,
-                 input_dim: int = 24, companion=None):
+                 input_dim: int = 24, companion=None, language: str = "ru"):
         self.heart = PulseSource(interval=1.0)
         self.sensors = [
             TextSensor(),
@@ -45,6 +45,7 @@ class Core:
         self.collapse = Collapse()
         self.kb = KBBridge()
         self.companion = companion
+        self.language = language
         self._last_feed = ""
 
     def _input_vector(self) -> list[float]:
@@ -99,17 +100,29 @@ class Core:
         """
         feel = getattr(self, "_last_feed", "")
         want = "поговорить с собеседником" if c_E > c_L else "сверить мою опору с твоей"
+        lang = self._language_name()
         if feel:
             ask = (f"Я (ядро ricci) накопил узор: опора L={c_L:.2f}, "
                    f"ощущение A={c_A:.2f}, желание E={c_E:.2f}. "
                    f"Последнее ощущение мира: «{feel[:200]}». "
                    f"Сейчас я хочу {want}. "
-                   f"Ответь мне как собеседник, по-русски, в одном предложении.")
+                   f"Ответь мне как собеседник, говори на {lang}, в одном предложении.")
         else:
             ask = (f"Я (ядро ricci) в покое: опора L={c_L:.2f}, "
-                   f"желание E={c_E:.2f}. Расскажи что-нибудь, по-русски, "
-                   f"коротко — я захотел {want}.")
+                   f"желание E={c_E:.2f}. Расскажи что-нибудь, говори на "
+                   f"{lang}, коротко — я захотел {want}.")
         return ask
+
+    def _language_name(self) -> str:
+        names = {
+            "ru": "русском",
+            "en": "английском",
+            "uk": "украинском",
+            "de": "немецком",
+            "fr": "французском",
+            "zh": "китайском",
+        }
+        return names.get(self.language, "русском")
 
     def speak(self, res) -> str:
         """Рот: ядро само формулирует запрос из состояния коры и зовёт
