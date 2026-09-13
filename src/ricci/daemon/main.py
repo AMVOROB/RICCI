@@ -20,6 +20,7 @@ from ..sensors.base import NullSensor
 from ..sensors.text import TextSensor
 from ..sensors.body import BodySensor
 from ..sensors.graph import GraphSensor
+from ..sensors.kbsense import KBSenseSensor
 from ..cortex import ESNReservoir
 from ..wave import ThreeTimes
 from ..core.collapse import Collapse
@@ -44,6 +45,7 @@ class Core:
             TextSensor(),
             BodySensor(),
             GraphSensor(kb_db),
+            KBSenseSensor(kb_path=r"D:\Projects\KB", db_path=kb_db),
         ]
         self.cortex = ESNReservoir(n_nodes=n_nodes, input_dim=input_dim)
         self.times = ThreeTimes()
@@ -81,7 +83,15 @@ class Core:
                 self._last_feed = feed
                 deltas.append(s.sense(feed))
             else:
-                deltas.append(s.sense())
+                d = s.sense()
+                if isinstance(s, KBSenseSensor) and d.text and d.intensity > 0:
+                    # база подарила смысл → отдаём текст в текстовый орган
+                    text_sensor = next(
+                        x for x in self.sensors if isinstance(x, TextSensor))
+                    self._last_feed = d.text
+                    deltas.append(text_sensor.sense(d.text))
+                else:
+                    deltas.append(d)
 
         u = [v for d in deltas for v in (d.intensity, d.direction)]
         u += [0.0] * (self.cortex.input_dim - len(u))
@@ -157,8 +167,8 @@ class Core:
         """Канал директивы: МОЙ вопрос — ядро ОБЯЗАНО ответить.
 
         Вопрос входит как ощущение мира (ΔS) → прогоняется корой →
-        ядро само рождает запрос собеседнику (текст вопроса уже в
-        узоре) → получает ответ и возвращает его. Решение остаётся в коре.
+        ядро ищет в нашей базе релевантные смыслы → формулирует запрос
+        роту, включая факты (против галлюцинаций) → ответ возвращается.
         Всё пишется в дневник и в KB.
         """
         r, res, agg = self.step(question)
@@ -167,7 +177,7 @@ class Core:
         self._conversation_seq += 1
         self.diary.header(f"вопрос #{self._conversation_seq}")
         self.diary.turn("ВОПРОС", question)
-        ask = self._form_ask(*self._current_state())
+        ask = self._form_answer_prompt(question)
         self.diary.state(res.mode, res.dominant, res.c)
         self.diary.turn("ЯДРО", ask)
         reply = self.companion.chat(ask)
@@ -176,6 +186,24 @@ class Core:
             self.sensors[0].sense(reply)
             self.kb.note_dialogue(ask, reply)
         return reply
+
+    def _form_answer_prompt(self, question: str) -> str:
+        """Промпт для директива: вопрос человека + опора на факты базы.
+
+        Кора выбрала react (реагируем), рот получает вопрос и релевантные
+        смыслы из нашей KB — так риччи отвечает из ЗНАНИЙ, не из самоописания.
+        """
+        c_L, c_A, c_E = self._current_state()
+        hits = self.kb.search(question, limit=3)
+        refs = "\n".join(
+            f"— {h.get('title','')}: {h.get('body','')[:240]}" 
+            for h in hits)
+        head = (f"Я (ядро ricci) отвечаю на вопрос человека. "
+                f"Состояние: L={c_L:.2f} A={c_A:.2f} E={c_E:.2f}. "
+                f"Вопрос: «{question[:300]}».\n"
+                f"Опора из моей базы знаний:\n{refs}\n"
+                f"Кратко, по-русски, без выдумок — опирайся только на эти факты.")
+        return head
 
     def remember(self, meaning: str, source: str = "диалог") -> int:
         """Записывает НОВЫЙ смысл в KB (после диалога ядро решает,

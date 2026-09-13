@@ -14,6 +14,7 @@ class Delta:
     intensity: float      # 0..1 — насколько изменилось
     direction: float      # -1..1 — притекло (+1) / утекло (-1)
     tag: str              # 'voice', 'text', 'graph', 'body'
+    text: str = ""        # содержимое ощущения, если оно несёт текст (узор)
 
 
 class Sensor(ABC):

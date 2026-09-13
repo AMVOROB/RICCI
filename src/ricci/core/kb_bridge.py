@@ -53,3 +53,13 @@ class KBBridge:
             return self._add("ricci-разговор", body, tags)
         except Exception:
             return 0
+
+    def search(self, query: str, limit: int = 3) -> list[dict]:
+        """Ищет релевантное в нашей базе знаний (гибрид вектор+bm25)."""
+        try:
+            if self.kb_path not in sys.path:
+                sys.path.insert(0, self.kb_path)
+            from kb.storage import hybrid_search
+            return hybrid_search(query, limit=limit)
+        except Exception:
+            return []
