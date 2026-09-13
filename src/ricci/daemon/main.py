@@ -33,7 +33,7 @@ class Core:
     """Сборка ядра: сердце → органы → кора → три времени → коллапс."""
 
     def __init__(self, kb_db: str = KB_DB, n_nodes: int = 256,
-                 input_dim: int = 24):
+                 input_dim: int = 24, companion=None):
         self.heart = PulseSource(interval=1.0)
         self.sensors = [
             TextSensor(),
@@ -44,6 +44,8 @@ class Core:
         self.times = ThreeTimes()
         self.collapse = Collapse()
         self.kb = KBBridge()
+        self.companion = companion
+        self._last_feed = ""
 
     def _input_vector(self) -> list[float]:
         vec = []
@@ -68,6 +70,7 @@ class Core:
         deltas = []
         for s in self.sensors:
             if isinstance(s, TextSensor) and feed:
+                self._last_feed = feed
                 deltas.append(s.sense(feed))
             else:
                 deltas.append(s.sense())
@@ -84,6 +87,60 @@ class Core:
         c_L, c_A, c_E = self.times.amplitudes(r, agg, 0.0)
         res = self.collapse.decide(c_L, c_A, c_E)
         return r, res, agg
+
+    def _current_state(self) -> tuple:
+        return self.times.amplitudes(self.cortex.r, 0.0, 0.0)
+
+    def _form_ask(self, c_L: float, c_A: float, c_E: float) -> str:
+        """Промпт рождается ИЗ СОСТОЯНИЯ КОРЫ, а не из сырого входа.
+
+        Ядро — не промптовый малыш: компаньон получает то, что ядро
+        само собрало между ощущениями, и вопрос-желание E.
+        """
+        feel = getattr(self, "_last_feed", "")
+        want = "поговорить с собеседником" if c_E > c_L else "сверить мою опору с твоей"
+        if feel:
+            ask = (f"Я (ядро ricci) накопил узор: опора L={c_L:.2f}, "
+                   f"ощущение A={c_A:.2f}, желание E={c_E:.2f}. "
+                   f"Последнее ощущение мира: «{feel[:200]}». "
+                   f"Сейчас я хочу {want}. "
+                   f"Ответь мне как собеседник, по-русски, в одном предложении.")
+        else:
+            ask = (f"Я (ядро ricci) в покое: опора L={c_L:.2f}, "
+                   f"желание E={c_E:.2f}. Расскажи что-нибудь, по-русски, "
+                   f"коротко — я захотел {want}.")
+        return ask
+
+    def speak(self, res) -> str:
+        """Рот: ядро само формулирует запрос из состояния коры и зовёт
+        собеседника. Ответ возвращается в текстовый орган как ΔS.
+        """
+        if self.companion is None or not self.companion.ping():
+            return ""
+        c_L, c_A, c_E = self._current_state()
+        ask = self._form_ask(c_L, c_A, c_E)
+        reply = self.companion.chat(ask)
+        # ответ = новое ощущение мира, снова размалывается корой
+        if reply:
+            self._last_feed = reply
+            self.sensors[0].sense(reply)
+        return reply
+
+    def answer(self, question: str) -> str:
+        """Канал директивы: МОЙ вопрос — ядро ОБЯЗАНО ответить.
+
+        Вопрос входит как ощущение мира (ΔS) → прогоняется корой →
+        ядро само рождает запрос собеседнику (текст вопроса уже в
+        узоре) → получает ответ и возвращает его. Решение остаётся в коре.
+        """
+        r, res, agg = self.step(question)
+        if self.companion is None or not self.companion.ping():
+            return ""
+        ask = self._form_ask(*self._current_state())
+        reply = self.companion.chat(ask)
+        if reply:
+            self.sensors[0].sense(reply)
+        return reply
 
     def sleep_now(self):
         """Сохранение и уход в сон (graceful)."""

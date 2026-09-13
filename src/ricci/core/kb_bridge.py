@@ -38,6 +38,18 @@ class KBBridge:
 
     def note_thought(self, text: str, tags: str = "project,ricci,thought") -> int:
         try:
-            return self._add("ricci-мысль", text[:4000], tags)
+            return self._add(
+                "ricci-мысль",
+                text[:4000],
+                tags,
+            )
+        except Exception:
+            return 0
+
+    def note_dialogue(self, prompt: str, reply: str,
+                      tags: str = "project,ricci,dialogue") -> int:
+        body = f"Ядро спросило:\n{prompt[:1500]}\n\nОтвет собеседника:\n{reply[:2500]}"
+        try:
+            return self._add("ricci-разговор", body, tags)
         except Exception:
             return 0
