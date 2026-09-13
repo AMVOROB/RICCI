@@ -1,4 +1,5 @@
-# RICCI modules:
-#  - ricci.graph  — ConceptGraph (граф смыслов из KB, кривизна Олливье)
-#  - ricci.wave   — WaveState (Ψ = E, L, A)
-#  - ricci.core   — AttentionCollapse + верификация
+# Ядро: коллапс трёх времён + действие (запись в KB).
+from .collapse import Collapse, CollapseResult
+from .kb_bridge import KBBridge
+
+__all__ = ["Collapse", "CollapseResult", "KBBridge"]
