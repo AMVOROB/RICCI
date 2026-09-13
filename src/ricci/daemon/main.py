@@ -94,9 +94,10 @@ class Core:
         return True
 
 
-def run(once_seconds: float | None = None, stop_file: str = DEFAULT_STOP_FILE):
+def run(once_seconds: float | None = None, stop_file: str = DEFAULT_STOP_FILE,
+        kb_write_every: int = 30):
     core = Core()
-    print(f"[ricci] сердце завелось. Путь: {sys.argv[0]}")
+    print(f"[ricci] сердце завелось. Путь: {sys.argv[0]}", flush=True)
     beats = core.heart.beats_until(once_seconds) if once_seconds \
         else core.heart.beats()
     for _b in beats:
@@ -104,19 +105,21 @@ def run(once_seconds: float | None = None, stop_file: str = DEFAULT_STOP_FILE):
             r, res, agg = core.step()
         except Exception as e:
             # ядро не должно умереть от частной ошибки органа
-            print(f"[ricci] сбой такта: {e}")
+            print(f"[ricci] сбой такта: {e}", flush=True)
             continue
 
-        # активных действий мало: пишем в KB только «значимые» пульсы
-        if res.mode != "rest" or (res.c[0] + res.c[2] > 0.6):
-            try:
-                core.kb.note_wake(res.mode, res.dominant, res.c)
-            except Exception:
-                pass
+        # активных действий мало: в KB пишем редко (каждые kb_write_every тактов
+        # или на значимый переход), иначе эмбеддинг-модель грузится каждый раз.
+        if res.mode != "rest":
+            if (_b.tick % kb_write_every == 0) or (res.mode in ("react", "want")):
+                try:
+                    core.kb.note_wake(res.mode, res.dominant, res.c)
+                except Exception:
+                    pass
         if _b.tick % 120 == 0:
             print(f"[ricci] такт {_b.tick}: режим={res.mode}, "
                   f"c=({res.c[0]:.2f},{res.c[1]:.2f},{res.c[2]:.2f}), "
-                  f"ощущение={agg:.3f}")
+                  f"ощущение={agg:.3f}", flush=True)
 
         # graceful: стоп-файл → уйти в сон
         if os.path.exists(stop_file):
